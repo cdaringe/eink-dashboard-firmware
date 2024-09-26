@@ -1,0 +1,16 @@
+= eink-dashboard-firmwarm
+
+Soldered firmware for the e-ink dashboard project.
+
+This arduino firmware plays nicely with https://github.com/cdaringe/eink-dashboard[cdaringe/eink-dashboard].
+
+WARNING: Great fun ahead!
+
+== Instructions
+
+. Clone this repo
+. `cp eink-dashboard-firmware/secrets.h.example eink-dashboard-firmware/secrets.h`
+. Edit `eink-dashboard-firmware/secrets.h` with your wifi credentials
+. Updating the the main `.ino` file with:
+.. your URI for the webhost and params
+.. the fallback images array
