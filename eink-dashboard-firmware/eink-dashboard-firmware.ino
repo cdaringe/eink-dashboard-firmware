@@ -11,7 +11,7 @@
 
 Inkplate display(INKPLATE_3BIT); // grayscale
 
-#define uS_TO_S_FACTOR 1000000LL
+#define micros_per_s 1000000LL
 
 const char *dashboard_image_uri_template = "http://192.168.1.10:8000/dashboard/airquality.png?textoverlay=%.1fv,508,1175,16&batteryoverlay=%d,540,1172,x24";
 const char *fallback_images[] = {
@@ -109,7 +109,7 @@ void setup()
   drawPngFromWeb(uri, true);
   free(uri);
   WiFi.mode(WIFI_OFF);
-  esp_sleep_enable_timer_wakeup(uS_TO_S_FACTOR * 60LL * 60LL);
+  esp_sleep_enable_timer_wakeup(micros_per_s * 60LL * 60LL);
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
   esp_deep_sleep_start();
 }
