@@ -5,6 +5,7 @@
 #define EINK_WIFI_SSID "YOUR_WIFI_SSID"
 #define EINK_WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 #define EINK_FALLBACK_IMAGE "https://some.grayscale.image.site/foo.png"
+#define EINK_REFRESH_INTERVAL_S 3600LL // 1 hr
 
 // ...THEN IMPLEMENT THIS IN inkconfig.cpp
 void *write_uri_string(Inkplate &display, char *uri512buff);

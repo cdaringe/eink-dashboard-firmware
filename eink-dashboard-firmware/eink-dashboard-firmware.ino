@@ -68,7 +68,7 @@ void setup()
   write_uri_string(display, uribuff);
   draw_png_from_web(uribuff, true);
   WiFi.mode(WIFI_OFF);
-  esp_sleep_enable_timer_wakeup(micros_per_s * 60LL * 60LL);
+  esp_sleep_enable_timer_wakeup(micros_per_s * EINK_REFRESH_INTERVAL_S);
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
   esp_deep_sleep_start();
 }
