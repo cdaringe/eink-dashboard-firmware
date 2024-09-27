@@ -1,72 +1,29 @@
 #include <stdint.h>
-#include "secrets.h"
+#include "inkconfig.h"
 
 #if !defined(ARDUINO_INKPLATE10) && !defined(ARDUINO_INKPLATE10V2)
 #error "Wrong board selection for this example, please select e-radionica Inkplate10 or Soldered Inkplate10 in the boards menu."
 #endif
 
-#include "HTTPClient.h" //Include library for HTTPClient
-#include "Inkplate.h"   //Include Inkplate library to the sketch
-#include "WiFi.h"       //Include library for WiFi
+#include "HTTPClient.h"
+#include "Inkplate.h"
+#include "WiFi.h"
 
 Inkplate display(INKPLATE_3BIT); // grayscale
 
 #define micros_per_s 1000000LL
 
-const char *dashboard_image_uri_template = "http://192.168.1.10:8000/dashboard/airquality.png?textoverlay=%.1fv,508,1175,16&batteryoverlay=%d,540,1172,x24";
-const char *fallback_images[] = {
-    "https://static.cdaringe.com/img/ds9-kd.png"};
-const int fallback_images_size = sizeof(fallback_images) / sizeof(fallback_images[0]);
+typedef enum {
+  GET_CURRENT,
+  GET_FORCED_REFRESH
+} RefreshStrategy;
 
 char msgbuff[256];
+char uribuff[512];
 
 void clear_buffer(char *buffer, size_t size)
 {
   memset(buffer, 0, size); // Clear the buffer by setting all elements to '\0'
-}
-
-int get_estimated_remaining_battery_percentage(double voltage)
-{
-  // Define the minimum and maximum voltage levels
-  const double minVoltage = 3.0; // Voltage at 0% battery
-  const double maxVoltage = 4.2; // Voltage at 100% battery
-
-  // Ensure the voltage is within the expected range
-  if (voltage < minVoltage)
-  {
-    return 0;
-  }
-  else if (voltage > maxVoltage)
-  {
-    return 100;
-  }
-
-  // Calculate the battery percentage
-  int percentage = (int)((voltage - minVoltage) / (maxVoltage - minVoltage) * 100);
-
-  return percentage;
-}
-
-char *get_uri_string()
-{
-  double voltage = display.readBattery();
-  int remainingPercent = get_estimated_remaining_battery_percentage(voltage);
-
-  int length = snprintf(NULL, 0, dashboard_image_uri_template, voltage, remainingPercent);
-
-  // Allocate memory for the new string
-  char *result = (char *)malloc(length + 1); // +1 for the null terminator
-
-  if (result == NULL)
-  {
-    fprintf(stderr, "Memory allocation failed\n");
-    return NULL;
-  }
-
-  // Fill in the template
-  sprintf(result, dashboard_image_uri_template, voltage, remainingPercent);
-
-  return result;
 }
 
 void msg(String text)
@@ -75,7 +32,19 @@ void msg(String text)
   display.setCursor(20, 20);
   display.setTextSize(4);
   display.println(text);
-  display.display();
+  bool leave_on = true;
+  display.display(leave_on);
+  clear_buffer(msgbuff, sizeof(msgbuff));
+}
+
+void msg_partial(String text)
+{
+  display.setCursor(20, 20);
+  display.setTextSize(4);
+  display.println(text);
+  bool forced = false;
+  bool leave_on = true;
+  display.partialUpdate(forced, leave_on);
   clear_buffer(msgbuff, sizeof(msgbuff));
 }
 
@@ -89,25 +58,15 @@ int get_random_index(int size)
   return rand() % size; // Return a random index
 };
 
-static int current_index = get_random_index(fallback_images_size);
-
-const char *get_next_image()
-{
-  current_index = (current_index + 1) % fallback_images_size; // Update the index
-  return fallback_images[current_index];                      // Return the next image
-}
-
 void setup()
 {
   display.begin();
   display.setRotation(3);
   display.setTextColor(0, 7);
-  displayInfo();
+  RefreshStrategy refresh_strategy = get_refresh_strategy_from_wakeup();
   init_wifi();
-  delay(1000);
-  char *uri = get_uri_string();
-  drawPngFromWeb(uri, true);
-  free(uri);
+  write_uri_string(display, uribuff);
+  draw_png_from_web(uribuff, true);
   WiFi.mode(WIFI_OFF);
   esp_sleep_enable_timer_wakeup(micros_per_s * 60LL * 60LL);
   esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
@@ -119,8 +78,7 @@ void init_wifi()
   WiFi.mode(WIFI_MODE_STA);
   WiFi.begin(EINK_WIFI_SSID, EINK_WIFI_PASSWORD);
   sprintf(msgbuff, "WiFi connecting to: %s", EINK_WIFI_SSID);
-  display.println(msgbuff);
-  display.partialUpdate();
+  msg_partial(msgbuff);
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
@@ -129,26 +87,25 @@ void init_wifi()
   }
 }
 
-void displayInfo()
+RefreshStrategy get_refresh_strategy_from_wakeup()
 {
   esp_sleep_wakeup_cause_t wakeup_reason;
   wakeup_reason = esp_sleep_get_wakeup_cause();
   switch (wakeup_reason)
   {
   case ESP_SLEEP_WAKEUP_EXT0:
-    msg("[wakeup] Yes, my lord? STOP POKING MEEEEEEEE!");
-    break;
+    msg_partial("[wakeup] manual");
+    return GET_FORCED_REFRESH;
   case ESP_SLEEP_WAKEUP_TIMER:
-    msg("[wakeup] timer tick");
-    break;
+    msg_partial("[wakeup] timer");
+    return GET_CURRENT;
   default:
-    msg("[wakep] good old fashioned wakeup");
-    break;
+    msg_partial("[wakep] boot");
+    return GET_CURRENT;
   }
-  delay(1000);
 }
 
-void drawPngFromWeb(const char *uri, bool retry)
+void draw_png_from_web(const char *uri, bool load_fallback_on_fail)
 {
   HTTPClient http;
   http.getStream().setNoDelay(true);
@@ -185,10 +142,9 @@ void drawPngFromWeb(const char *uri, bool retry)
     msg(msgbuff);
   }
 
-  delay(2000);
-
-  if (retry)
-    return drawPngFromWeb(get_next_image(), false);
+  if (load_fallback_on_fail) {
+    return draw_png_from_web(EINK_FALLBACK_IMAGE, false);
+  }
 }
 
 void loop()

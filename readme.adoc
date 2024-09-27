@@ -9,8 +9,9 @@ WARNING: Great fun ahead!
 == Instructions
 
 . Clone this repo
-. `cp eink-dashboard-firmware/secrets.h.example eink-dashboard-firmware/secrets.h`
-. Edit `eink-dashboard-firmware/secrets.h` with your wifi credentials
+. `cp eink-dashboard-firmware/inkconfig.h.example eink-dashboard-firmware/inkconfig.h`
+. Edit `eink-dashboard-firmware/inkconfig.h` with your wifi credentials
+. Edit `eink-dashboard-firmware/inkconfig.cpp` and implement `write_uri_string`! Use the example as reference.
 . Updating the the main `.ino` file with:
 .. your URI for the webhost and params
 .. the fallback images array
