@@ -1,13 +1,17 @@
 #ifndef INKCONFIG_H
 #define INKCONFIG_H
 
+typedef struct {
+  const char* title;
+  const char* slug;
+} MenuItem;
+
 // FILL THESE IN...
 #define EINK_WIFI_SSID "YOUR_WIFI_SSID"
 #define EINK_WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 #define EINK_FALLBACK_IMAGE "https://some.grayscale.image.site/foo.png"
 #define EINK_REFRESH_INTERVAL_S 3600LL // 1 hr
-
-// ...THEN IMPLEMENT THIS IN inkconfig.cpp
-void write_uri_string(Inkplate &display, char *uri512buff);
+#define DASHBOARD_BASE_URL "http://192.168.1.10:8000/dashboard"
 
 #endif
+

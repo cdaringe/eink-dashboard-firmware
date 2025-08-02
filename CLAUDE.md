@@ -3,12 +3,10 @@
 ## Performance Requirements
 
 ### Display Updates
-- **CRITICAL**: Always use `partialUpdate()` for menu navigation, never `display()`
-- Full `display()` calls are slow (~2-3 seconds) and should only be used for:
-  - Initial menu display
-  - Image loading screens
-  - Error messages
-- Menu pointer movement must use `partialUpdate()` for responsive UI
+- **IMPORTANT**: `partialUpdate()` does NOT work on this Inkplate model
+- All display updates must use `display()` which takes ~2-3 seconds
+- This means button handling must be robust against display blocking
+- Menu updates will be inherently slow due to hardware limitations
 
 ### WiFi Optimization
 - **CRITICAL**: WiFi connection is slow (~3-5 seconds)

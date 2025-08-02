@@ -23,20 +23,7 @@ typedef enum {
   MENU_MODE
 } OperatingMode;
 
-typedef struct {
-  const char* title;
-  const char* url;
-} MenuItem;
 
-const MenuItem menu_items[] = {
-  {"Air Stats", MENU_AIR_STATS},
-  {"Onion", MENU_ONION},
-  {"Recipes", MENU_RECIPES},
-  {"Family Portrait", MENU_FAMILY_PORTRAIT},
-  {"Run Standard Loop", ""}
-};
-
-const int MENU_ITEM_COUNT = sizeof(menu_items) / sizeof(menu_items[0]);
 
 // Operating state
 OperatingMode current_operating_mode = NORMAL_MODE;
@@ -52,12 +39,70 @@ const unsigned long LONG_PRESS_THRESHOLD_MS = 1000;
 const unsigned long DOUBLE_CLICK_WINDOW_MS = 500;
 const unsigned long SINGLE_CLICK_DELAY_MS = 200;
 
+// Menu layout constants
+const int MENU_TITLE_X = 60;
+const int MENU_TITLE_Y = 20;
+const int MENU_TITLE_SIZE = 4;
+const int MENU_ITEM_X = 60;
+const int MENU_ITEM_SIZE = 2;
+const int MENU_POINTER_X = 20;
+const int PIXELS_PER_TEXT_SIZE = 8;
+
 char msgbuff[256];
 char uribuff[512];
 
 void clear_buffer(char *buffer, size_t size)
 {
   memset(buffer, 0, size); // Clear the buffer by setting all elements to '\0'
+}
+
+int calculate_menu_items_start_y()
+{
+  // Title height + blank line height
+  int title_height = MENU_TITLE_SIZE * PIXELS_PER_TEXT_SIZE;
+  int blank_line_height = MENU_TITLE_SIZE * PIXELS_PER_TEXT_SIZE;
+  return MENU_TITLE_Y + title_height + blank_line_height;
+}
+
+int calculate_menu_line_height()
+{
+  return MENU_ITEM_SIZE * PIXELS_PER_TEXT_SIZE;
+}
+
+String resolve_redirect_url(const char* original_uri, const String& location)
+{
+  // Check if location is absolute URL (contains ://)
+  if (location.indexOf("://") > 0) {
+    return location; // Already absolute
+  }
+  
+  // Handle relative URL - need to extract base from original URI
+  String original_url = String(original_uri);
+  
+  // Find the base URL (protocol + host)
+  int protocol_end = original_url.indexOf("://");
+  if (protocol_end < 0) {
+    return location; // Can't resolve, return as-is
+  }
+  
+  int path_start = original_url.indexOf("/", protocol_end + 3);
+  String base_url;
+  
+  if (path_start > 0) {
+    base_url = original_url.substring(0, path_start);
+  } else {
+    base_url = original_url; // No path in original URL
+  }
+  
+  // Handle different types of relative URLs
+  if (location.startsWith("/")) {
+    // Absolute path: http://example.com + /new/path
+    return base_url + location;
+  } else {
+    // Relative path: http://example.com/old/ + new/path
+    // For simplicity, treat as absolute path
+    return base_url + "/" + location;
+  }
 }
 
 bool is_button_currently_pressed()
@@ -67,10 +112,17 @@ bool is_button_currently_pressed()
 
 void handle_button_input()
 {
+  static unsigned long last_successful_poll = 0;
   bool wake_button_pressed_curr = is_button_currently_pressed();
   unsigned long current_time_ms = millis();
 
   // STATE MACHINE: Monitor button press/release transitions
+
+  // Reset state if polling has been blocked too long (display operations)
+  if (current_time_ms - last_successful_poll > 1000) {
+    wake_button_pressed_prev = false;
+    last_button_release_time_ms = 0;
+  }
 
   // TRANSITION: Button pressed (rising edge detection)
   if (wake_button_pressed_curr && !wake_button_pressed_prev) {
@@ -112,6 +164,9 @@ void handle_button_input()
     handle_single_click_action();
     last_button_release_time_ms = 0; // Reset timer
   }
+
+  // Update successful poll timestamp
+  last_successful_poll = current_time_ms;
 }
 
 void handle_single_click_action()
@@ -124,15 +179,7 @@ void handle_single_click_action()
   else if (current_operating_mode == MENU_MODE) {
     // Navigate to next menu item
     current_menu_selection_index = (current_menu_selection_index + 1) % MENU_ITEM_COUNT;
-
-    // Debug: Show selection index temporarily
-    snprintf(msgbuff, sizeof(msgbuff), "Sel: %d", current_menu_selection_index);
-    display.setCursor(200, 20);
-    display.setTextSize(1);
-    display.setTextColor(0, 7);
-    display.print(msgbuff);
-
-    update_menu_pointer(); // Fast pointer update only
+    update_menu_pointer();
   }
 }
 
@@ -156,22 +203,26 @@ void handle_long_press_action()
 void display_menu()
 {
   display.clearDisplay();
-  display.setCursor(60, 20);
-  display.setTextSize(3);
+  
+  // Set title position and style
+  display.setCursor(MENU_TITLE_X, MENU_TITLE_Y);
+  display.setTextSize(MENU_TITLE_SIZE);
   display.setTextColor(0, 7);
 
   display.println("MENU");
-  display.println();
+  display.println(); // Add some space after title
 
-  // Show all menu items in a vertical list
-  int y_start = 80;
-  int line_height = 60;
-
+  // Menu items - use shared layout calculations
+  display.setTextSize(MENU_ITEM_SIZE);
+  display.setTextColor(0, 7);
+  
+  int current_y = calculate_menu_items_start_y();
+  int line_height = calculate_menu_line_height();
+  
   for (int i = 0; i < MENU_ITEM_COUNT; i++) {
-    display.setCursor(60, y_start + (i * line_height));
-    display.setTextSize(2);
-    display.setTextColor(0, 7);
+    display.setCursor(MENU_ITEM_X, current_y);
     display.println(menu_items[i].title);
+    current_y += line_height; // Increment Y for next item
   }
 
   // Draw initial pointer
@@ -180,60 +231,71 @@ void display_menu()
   display.display();
 }
 
+void execute_normal_dashboard_operation()
+{
+  // Standard dashboard operation: show air quality with battery info
+  init_wifi();
+  write_dashboard_uri_string(display, "", uribuff);
+  draw_png_from_web(uribuff, true);
+  WiFi.mode(WIFI_OFF);
+  esp_sleep_enable_timer_wakeup(micros_per_s * EINK_REFRESH_INTERVAL_S);
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
+  esp_deep_sleep_start();
+}
+
 void draw_menu_pointer()
 {
-  // Match the exact layout from display_menu()
-  int pointer_x = 20;
-  int y_start = 80;
-  int line_height = 60;
-  int pointer_y = y_start + (current_menu_selection_index * line_height);
+  // Use shared layout calculations
+  int menu_start_y = calculate_menu_items_start_y();
+  int line_height = calculate_menu_line_height();
+  
+  int pointer_y = menu_start_y + (current_menu_selection_index * line_height);
 
   // Clear the entire pointer column (white background)
-  display.fillRect(pointer_x - 5, y_start - 10, 40, MENU_ITEM_COUNT * line_height + 20, 7);
+  int total_menu_height = MENU_ITEM_COUNT * line_height;
+  display.fillRect(MENU_POINTER_X - 5, menu_start_y - 5, 40, total_menu_height + 10, 7);
 
-  // Draw pointer arrow ">" at exact same position as text
-  display.setCursor(pointer_x, pointer_y);
-  display.setTextSize(2);
+  // Draw pointer arrow ">" at calculated position
+  display.setCursor(MENU_POINTER_X, pointer_y);
+  display.setTextSize(MENU_ITEM_SIZE);
   display.setTextColor(0, 7);
   display.print(">");
 }
 
 void update_menu_pointer()
 {
-  // Redraw just the pointer column
   draw_menu_pointer();
-
-  // Use partial update for speed - only update the pointer area
-  display.partialUpdate();
+  display.display();
 }
 
 void select_menu_item(int index)
 {
   if (index == MENU_ITEM_COUNT - 1) {
-    // "Run Standard Loop" selected
     current_operating_mode = NORMAL_MODE;
     display.clearDisplay();
-    msg("Resuming normal operation");
+    msg_debug("Resuming normal operation");
     delay(1000);
 
     // Continue with normal operation
-    init_wifi();
-    write_uri_string(display, uribuff);
-    draw_png_from_web(uribuff, true);
-    WiFi.mode(WIFI_OFF);
-    esp_sleep_enable_timer_wakeup(micros_per_s * EINK_REFRESH_INTERVAL_S);
-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
-    esp_deep_sleep_start();
+    execute_normal_dashboard_operation();
   }
   else {
     // Display selected image
     display.clearDisplay();
     snprintf(msgbuff, sizeof(msgbuff), "Loading %s...", menu_items[index].title);
     msg(msgbuff);
-    
+
     // Initialize WiFi before attempting to download image
     init_wifi();
-    draw_png_from_web(menu_items[index].url, true);
+    const char* slug_or_url = menu_items[index].uri;
+
+    // If the URI starts with '/', assume it's a dashboard slug.
+    if (slug_or_url[0] == '/') {
+      write_dashboard_uri_string(display, slug_or_url, uribuff);
+    } else {
+      snprintf(uribuff, 512, "%s", slug_or_url);
+    }
+    draw_png_from_web(uribuff, true);
     WiFi.mode(WIFI_OFF);
     esp_sleep_enable_timer_wakeup(micros_per_s * EINK_REFRESH_INTERVAL_S);
     esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
@@ -252,17 +314,11 @@ void msg(String text)
   clear_buffer(msgbuff, sizeof(msgbuff));
 }
 
-void msg_partial(String text)
-{
-  display.setCursor(20, 20);
-  display.setTextSize(4);
-  display.println(text);
-  bool forced = false;
-  bool leave_on = true;
-  display.partialUpdate(forced, leave_on);
-  clear_buffer(msgbuff, sizeof(msgbuff));
+void msg_debug(String text) {
+  if (LOG_LEVEL_DEBUG) {
+    msg(text);
+  }
 }
-
 
 void setup()
 {
@@ -289,13 +345,7 @@ void setup()
   else {
     // Timer wakeup or boot - run normal operation
     current_operating_mode = NORMAL_MODE;
-    init_wifi();
-    write_uri_string(display, uribuff);
-    draw_png_from_web(uribuff, true);
-    WiFi.mode(WIFI_OFF);
-    esp_sleep_enable_timer_wakeup(micros_per_s * EINK_REFRESH_INTERVAL_S);
-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
-    esp_deep_sleep_start();
+    execute_normal_dashboard_operation();
   }
 }
 
@@ -304,14 +354,14 @@ void init_wifi()
   WiFi.mode(WIFI_MODE_STA);
   WiFi.begin(EINK_WIFI_SSID, EINK_WIFI_PASSWORD);
   snprintf(msgbuff, sizeof(msgbuff), "WiFi connecting to: %s", EINK_WIFI_SSID);
-  msg_partial(msgbuff);
+  msg_debug(msgbuff);
 
   unsigned long wifi_start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - wifi_start < 30000)
   {
     delay(500);
     display.print(".");
-    display.partialUpdate();
+    display.display();
   }
 
   if (WiFi.status() != WL_CONNECTED) {
@@ -327,19 +377,28 @@ RefreshStrategy get_refresh_strategy_from_wakeup()
   switch (wakeup_reason)
   {
   case ESP_SLEEP_WAKEUP_EXT0:
-    msg_partial("[wakeup] manual");
+    msg_debug("[wakeup] manual");
     return GET_FORCED_REFRESH;
   case ESP_SLEEP_WAKEUP_TIMER:
-    msg_partial("[wakeup] timer");
+    msg_debug("[wakeup] timer");
     return GET_CURRENT;
   default:
-    msg_partial("[wakep] boot");
+    msg_debug("[wakep] boot");
     return GET_CURRENT;
   }
 }
 
-void draw_png_from_web(const char *uri, bool load_fallback_on_fail)
+void draw_png_from_web(const char *uri, bool load_fallback_on_fail, int redirect_count)
 {
+  // Prevent infinite redirect loops
+  if (redirect_count > 5) {
+    msg("Too many redirects");
+    if (load_fallback_on_fail) {
+      return draw_png_from_web(EINK_FALLBACK_IMAGE, false, 0);
+    }
+    return;
+  }
+
   HTTPClient http;
   http.getStream().setNoDelay(true);
   http.getStream().setTimeout(1);
@@ -347,8 +406,36 @@ void draw_png_from_web(const char *uri, bool load_fallback_on_fail)
 
   // Check response code.
   int http_code = http.GET();
-  if (http_code == 200)
+
+  if (http_code >300 && http_code < 400) {
+    String redirect_url = http.getLocation();
+    http.end();
+
+    if (redirect_url.length() > 0) {
+      // Resolve relative/absolute URL
+      String resolved_url = resolve_redirect_url(uri, redirect_url);
+      
+      snprintf(msgbuff, sizeof(msgbuff), "Redirect %d (%d/5)", http_code, redirect_count + 1);
+      msg(msgbuff);
+      delay(500);
+
+      // Follow redirect with resolved URL
+      return draw_png_from_web(resolved_url.c_str(), load_fallback_on_fail, redirect_count + 1);
+    }
+    else {
+      snprintf(msgbuff, sizeof(msgbuff), "Redirect %d but no location", http_code);
+      msg(msgbuff);
+      http.end();
+
+      if (load_fallback_on_fail) {
+        return draw_png_from_web(EINK_FALLBACK_IMAGE, false, 0);
+      }
+      return;
+    }
+  }
+  else if (http_code == 200)
   {
+    redirect_count = 0; // Reset redirect count on successful response
     int32_t len = http.getSize();
     if (len > 0)
     {
@@ -361,6 +448,7 @@ void draw_png_from_web(const char *uri, bool load_fallback_on_fail)
       else
       {
         display.display();
+        http.end();
         return;
       }
     }
@@ -375,8 +463,10 @@ void draw_png_from_web(const char *uri, bool load_fallback_on_fail)
     msg(msgbuff);
   }
 
+  http.end();
+
   if (load_fallback_on_fail) {
-    return draw_png_from_web(EINK_FALLBACK_IMAGE, false);
+    return draw_png_from_web(EINK_FALLBACK_IMAGE, false, 0);
   }
 }
 
