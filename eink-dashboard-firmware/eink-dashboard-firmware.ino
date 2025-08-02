@@ -75,25 +75,25 @@ String resolve_redirect_url(const char* original_uri, const String& location)
   if (location.indexOf("://") > 0) {
     return location; // Already absolute
   }
-  
+
   // Handle relative URL - need to extract base from original URI
   String original_url = String(original_uri);
-  
+
   // Find the base URL (protocol + host)
   int protocol_end = original_url.indexOf("://");
   if (protocol_end < 0) {
     return location; // Can't resolve, return as-is
   }
-  
+
   int path_start = original_url.indexOf("/", protocol_end + 3);
   String base_url;
-  
+
   if (path_start > 0) {
     base_url = original_url.substring(0, path_start);
   } else {
     base_url = original_url; // No path in original URL
   }
-  
+
   // Handle different types of relative URLs
   if (location.startsWith("/")) {
     // Absolute path: http://example.com + /new/path
@@ -203,7 +203,7 @@ void handle_long_press_action()
 void display_menu()
 {
   display.clearDisplay();
-  
+
   // Set title position and style
   display.setCursor(MENU_TITLE_X, MENU_TITLE_Y);
   display.setTextSize(MENU_TITLE_SIZE);
@@ -215,10 +215,10 @@ void display_menu()
   // Menu items - use shared layout calculations
   display.setTextSize(MENU_ITEM_SIZE);
   display.setTextColor(0, 7);
-  
+
   int current_y = calculate_menu_items_start_y();
   int line_height = calculate_menu_line_height();
-  
+
   for (int i = 0; i < MENU_ITEM_COUNT; i++) {
     display.setCursor(MENU_ITEM_X, current_y);
     display.println(menu_items[i].title);
@@ -248,7 +248,7 @@ void draw_menu_pointer()
   // Use shared layout calculations
   int menu_start_y = calculate_menu_items_start_y();
   int line_height = calculate_menu_line_height();
-  
+
   int pointer_y = menu_start_y + (current_menu_selection_index * line_height);
 
   // Clear the entire pointer column (white background)
@@ -274,7 +274,6 @@ void select_menu_item(int index)
     current_operating_mode = NORMAL_MODE;
     display.clearDisplay();
     msg_debug("Resuming normal operation");
-    delay(1000);
 
     // Continue with normal operation
     execute_normal_dashboard_operation();
@@ -282,8 +281,6 @@ void select_menu_item(int index)
   else {
     // Display selected image
     display.clearDisplay();
-    snprintf(msgbuff, sizeof(msgbuff), "Loading %s...", menu_items[index].title);
-    msg(msgbuff);
 
     // Initialize WiFi before attempting to download image
     init_wifi();
@@ -414,17 +411,14 @@ void draw_png_from_web(const char *uri, bool load_fallback_on_fail, int redirect
     if (redirect_url.length() > 0) {
       // Resolve relative/absolute URL
       String resolved_url = resolve_redirect_url(uri, redirect_url);
-      
       snprintf(msgbuff, sizeof(msgbuff), "Redirect %d (%d/5)", http_code, redirect_count + 1);
-      msg(msgbuff);
-      delay(500);
-
-      // Follow redirect with resolved URL
+      msg_debug(msgbuff);
       return draw_png_from_web(resolved_url.c_str(), load_fallback_on_fail, redirect_count + 1);
     }
     else {
       snprintf(msgbuff, sizeof(msgbuff), "Redirect %d but no location", http_code);
-      msg(msgbuff);
+      msg_debug(msgbuff);
+
       http.end();
 
       if (load_fallback_on_fail) {

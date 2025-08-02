@@ -11,7 +11,28 @@ typedef struct {
 #define EINK_WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 #define EINK_FALLBACK_IMAGE "https://some.grayscale.image.site/foo.png"
 #define EINK_REFRESH_INTERVAL_S 3600LL // 1 hr
+#define LOG_LEVEL_DEBUG false
+
+// Menu configuration
+#define MENU_AIR_STATS "/airquality"
+#define MENU_ONION "/onion"
+#define MENU_RECIPES "/recipes"
+#define MENU_FAMILY_PORTRAIT EINK_FALLBACK_IMAGE
+
+const MenuItem menu_items[] = {
+  {"Air Quality", MENU_AIR_STATS},
+  {"Onion", MENU_ONION},
+  {"Recipes", MENU_RECIPES},
+  {"Family Portrait", MENU_FAMILY_PORTRAIT},
+  {"Run Standard Loop", ""}
+};
+
+const int MENU_ITEM_COUNT = sizeof(menu_items) / sizeof(menu_items[0]);
+
 #define DASHBOARD_BASE_URL "http://192.168.1.10:8000/dashboard"
 
-#endif
+// Function declarations
+void write_dashboard_uri_string(Inkplate &display, const char* dashboard_kind, char *uri512buff);
+void draw_png_from_web(const char *uri, bool load_fallback_on_fail, int redirect_count = 0);
 
+#endif
