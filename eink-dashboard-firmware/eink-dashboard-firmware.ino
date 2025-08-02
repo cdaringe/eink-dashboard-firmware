@@ -48,22 +48,13 @@ void msg_partial(String text)
   clear_buffer(msgbuff, sizeof(msgbuff));
 }
 
-int get_random_index(int size)
-{
-  if (size <= 0)
-  {
-    return -1; // Return -1 if the array is empty
-  }
-  srand(time(NULL));    // Seed the random number generator
-  return rand() % size; // Return a random index
-};
 
 void setup()
 {
   display.begin();
   display.setRotation(3);
   display.setTextColor(0, 7);
-  RefreshStrategy refresh_strategy = get_refresh_strategy_from_wakeup();
+  get_refresh_strategy_from_wakeup();
   init_wifi();
   write_uri_string(display, uribuff);
   draw_png_from_web(uribuff, true);
@@ -77,13 +68,20 @@ void init_wifi()
 {
   WiFi.mode(WIFI_MODE_STA);
   WiFi.begin(EINK_WIFI_SSID, EINK_WIFI_PASSWORD);
-  sprintf(msgbuff, "WiFi connecting to: %s", EINK_WIFI_SSID);
+  snprintf(msgbuff, sizeof(msgbuff), "WiFi connecting to: %s", EINK_WIFI_SSID);
   msg_partial(msgbuff);
-  while (WiFi.status() != WL_CONNECTED)
+  
+  unsigned long wifi_start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - wifi_start < 30000)
   {
     delay(500);
     display.print(".");
     display.partialUpdate();
+  }
+  
+  if (WiFi.status() != WL_CONNECTED) {
+    msg("WiFi connection timeout");
+    esp_deep_sleep_start();
   }
 }
 
@@ -122,7 +120,7 @@ void draw_png_from_web(const char *uri, bool load_fallback_on_fail)
       int render_image_code = display.drawPngFromWeb(http.getStreamPtr(), 0, 0, len);
       if (!render_image_code)
       {
-        sprintf(msgbuff, "Image open error (%d) (%s)", render_image_code, uri);
+        snprintf(msgbuff, sizeof(msgbuff), "Image open error (%d) (%s)", render_image_code, uri);
         msg(msgbuff);
       }
       else
@@ -138,7 +136,7 @@ void draw_png_from_web(const char *uri, bool load_fallback_on_fail)
   }
   else
   {
-    sprintf(msgbuff, "http code %d (%s)", http_code, uri);
+    snprintf(msgbuff, sizeof(msgbuff), "http code %d (%s)", http_code, uri);
     msg(msgbuff);
   }
 

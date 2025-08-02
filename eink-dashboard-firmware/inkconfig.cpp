@@ -22,10 +22,10 @@ int get_estimated_remaining_battery_percentage(double voltage)
   return percentage;
 }
 
-void *write_uri_string(Inkplate &display, char* uri512buff)
+void write_uri_string(Inkplate &display, char* uri512buff)
 {
   double voltage = display.readBattery();
   int remaining_percent = get_estimated_remaining_battery_percentage(voltage);
-  sprintf(uri512buff, "http://192.168.1.10:8000/dashboard/airquality.png?textoverlay=%.1fV,498,1175,16&batteryoverlay=%d,540,1172,x24", voltage, remaining_percent);
+  snprintf(uri512buff, 512, "http://192.168.1.10:8000/dashboard/airquality.png?textoverlay=%.1fV,498,1175,16&batteryoverlay=%d,540,1172,x24", voltage, remaining_percent);
 }
 

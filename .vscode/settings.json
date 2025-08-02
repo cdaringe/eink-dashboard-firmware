@@ -1,1 +1,23 @@
-{}
+{
+  "C_Cpp.intelliSenseEngine": "default",
+  "C_Cpp.default.includePath": [
+    "${workspaceFolder}/**",
+    "/usr/local/include",
+    "/usr/include"
+  ],
+  "C_Cpp.default.defines": [
+    "ARDUINO=10819",
+    "ARDUINO_ARCH_ESP32", 
+    "ESP32",
+    "ARDUINO_INKPLATE10",
+    "ARDUINO_INKPLATE10V2",
+    "ESP_PLATFORM",
+    "F_CPU=240000000L"
+  ],
+  "C_Cpp.default.cStandard": "c11",
+  "C_Cpp.default.cppStandard": "c++17",
+  "files.associations": {
+    "*.ino": "cpp"
+  },
+  "C_Cpp.errorSquiggles": "disabled"
+}

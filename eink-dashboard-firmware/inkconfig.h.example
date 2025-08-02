@@ -8,6 +8,6 @@
 #define EINK_REFRESH_INTERVAL_S 3600LL // 1 hr
 
 // ...THEN IMPLEMENT THIS IN inkconfig.cpp
-void *write_uri_string(Inkplate &display, char *uri512buff);
+void write_uri_string(Inkplate &display, char *uri512buff);
 
 #endif
