@@ -204,17 +204,16 @@ void display_menu()
 {
   display.clearDisplay();
 
-  // Set title position and style
+  // Set title position and style (1BIT colors: 0=black, 1=white)
   display.setCursor(MENU_TITLE_X, MENU_TITLE_Y);
   display.setTextSize(MENU_TITLE_SIZE);
-  display.setTextColor(0, 7);
+  display.setTextColor(1, 0);
 
   display.println("MENU");
   display.println(); // Add some space after title
 
   // Menu items - use shared layout calculations
   display.setTextSize(MENU_ITEM_SIZE);
-  display.setTextColor(0, 7);
 
   int current_y = calculate_menu_items_start_y();
   int line_height = calculate_menu_line_height();
@@ -237,35 +236,34 @@ void execute_normal_dashboard_operation()
   init_wifi();
   write_dashboard_uri_string(display, "", uribuff);
   draw_png_from_web(uribuff, true);
-  WiFi.mode(WIFI_OFF);
-  esp_sleep_enable_timer_wakeup(micros_per_s * EINK_REFRESH_INTERVAL_S);
-  esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
-  esp_deep_sleep_start();
+  deep_sleep();
 }
 
 void draw_menu_pointer()
 {
+  display.setTextColor(1, 0); // Black text on white background
   // Use shared layout calculations
   int menu_start_y = calculate_menu_items_start_y();
   int line_height = calculate_menu_line_height();
 
   int pointer_y = menu_start_y + (current_menu_selection_index * line_height);
 
-  // Clear the entire pointer column (white background)
+  // Clear the entire pointer column (white background - 1BIT mode)
   int total_menu_height = MENU_ITEM_COUNT * line_height;
-  display.fillRect(MENU_POINTER_X - 5, menu_start_y - 5, 40, total_menu_height + 10, 7);
+  display.fillRect(MENU_POINTER_X - 5, menu_start_y - 5, 40, total_menu_height + 10, 1);
 
-  // Draw pointer arrow ">" at calculated position
+  // Draw pointer arrow ">" at calculated position (1BIT colors)
   display.setCursor(MENU_POINTER_X, pointer_y);
   display.setTextSize(MENU_ITEM_SIZE);
-  display.setTextColor(0, 7);
   display.print(">");
 }
 
 void update_menu_pointer()
 {
   draw_menu_pointer();
-  display.display();
+
+  // Use partial update for faster menu navigation in 1BIT mode
+  display.partialUpdate();
 }
 
 void select_menu_item(int index)
@@ -279,10 +277,8 @@ void select_menu_item(int index)
     execute_normal_dashboard_operation();
   }
   else {
-    // Display selected image
     display.clearDisplay();
-
-    // Initialize WiFi before attempting to download image
+    msg("Loading: " + String(menu_items[index].title));
     init_wifi();
     const char* slug_or_url = menu_items[index].uri;
 
@@ -293,11 +289,15 @@ void select_menu_item(int index)
       snprintf(uribuff, 512, "%s", slug_or_url);
     }
     draw_png_from_web(uribuff, true);
-    WiFi.mode(WIFI_OFF);
-    esp_sleep_enable_timer_wakeup(micros_per_s * EINK_REFRESH_INTERVAL_S);
-    esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
-    esp_deep_sleep_start();
+    deep_sleep();
   }
+}
+
+void deep_sleep() {
+  WiFi.mode(WIFI_OFF);
+  esp_sleep_enable_timer_wakeup(micros_per_s * EINK_REFRESH_INTERVAL_S);
+  esp_sleep_enable_ext0_wakeup(GPIO_NUM_36, LOW);
+  esp_deep_sleep_start();
 }
 
 void msg(String text)
@@ -312,16 +312,15 @@ void msg(String text)
 }
 
 void msg_debug(String text) {
-  if (LOG_LEVEL_DEBUG) {
-    msg(text);
-  }
+  if (LOG_LEVEL_DEBUG) msg(text);
 }
 
 void setup()
 {
   display.begin();
+  display.selectDisplayMode(INKPLATE_1BIT); // Default to 1BIT for fast updates
   display.setRotation(3);
-  display.setTextColor(0, 7);
+  display.setTextColor(1, 0); // 1BIT colors: black text on white background
 
   pinMode(GPIO_NUM_36, INPUT_PULLUP);
 
@@ -433,15 +432,18 @@ void draw_png_from_web(const char *uri, bool load_fallback_on_fail, int redirect
     int32_t len = http.getSize();
     if (len > 0)
     {
+      display.selectDisplayMode(INKPLATE_3BIT);
       int render_image_code = display.drawPngFromWeb(http.getStreamPtr(), 0, 0, len);
       if (!render_image_code)
       {
+        display.selectDisplayMode(INKPLATE_1BIT);
         snprintf(msgbuff, sizeof(msgbuff), "Image open error (%d) (%s)", render_image_code, uri);
         msg(msgbuff);
       }
       else
       {
         display.display();
+        display.selectDisplayMode(INKPLATE_1BIT);
         http.end();
         return;
       }
