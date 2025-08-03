@@ -30,7 +30,7 @@ void write_dashboard_uri_string(Inkplate &display, const char* dashboard_uri, ch
     int remaining_percent = get_estimated_remaining_battery_percentage(voltage);
     snprintf(uri512buff, 512, "%s%s?textoverlay=%.1fV,498,1175,16&batteryoverlay=%d,540,1172,x24", DASHBOARD_BASE_URL, dashboard_uri, voltage, remaining_percent);
   } else {
-    snprintf(uribuff, 512, "%s", dashboard_uri);
+    snprintf(uri512buff, 512, "%s", dashboard_uri);
   }
 }
 
