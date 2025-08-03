@@ -232,7 +232,6 @@ void display_menu()
 
 void execute_normal_dashboard_operation()
 {
-  // Standard dashboard operation: show air quality with battery info
   init_wifi();
   write_dashboard_uri_string(display, "", uribuff);
   draw_png_from_web(uribuff, true);
@@ -268,29 +267,19 @@ void update_menu_pointer()
 
 void select_menu_item(int index)
 {
-  if (index == MENU_ITEM_COUNT - 1) {
+  bool is_last_entry = index == MENU_ITEM_COUNT - 1;
+  display.clearDisplay();
+  if (is_last_entry) {
     current_operating_mode = NORMAL_MODE;
-    display.clearDisplay();
     msg_debug("Resuming normal operation");
-
-    // Continue with normal operation
     execute_normal_dashboard_operation();
+    return;
   }
-  else {
-    display.clearDisplay();
-    msg("Loading: " + String(menu_items[index].title));
-    init_wifi();
-    const char* slug_or_url = menu_items[index].uri;
-
-    // If the URI starts with '/', assume it's a dashboard slug.
-    if (slug_or_url[0] == '/') {
-      write_dashboard_uri_string(display, slug_or_url, uribuff);
-    } else {
-      snprintf(uribuff, 512, "%s", slug_or_url);
-    }
-    draw_png_from_web(uribuff, true);
-    deep_sleep();
-  }
+  msg("Loading: " + String(menu_items[index].title));
+  init_wifi();
+  write_dashboard_uri_string(display, menu_items[index].uri, uribuff);
+  draw_png_from_web(uribuff, true);
+  deep_sleep();
 }
 
 void deep_sleep() {
@@ -355,9 +344,7 @@ void init_wifi()
   unsigned long wifi_start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - wifi_start < 30000)
   {
-    delay(500);
-    display.print(".");
-    display.display();
+    delay(100);
   }
 
   if (WiFi.status() != WL_CONNECTED) {
