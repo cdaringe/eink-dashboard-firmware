@@ -25,7 +25,7 @@ int get_estimated_remaining_battery_percentage(double voltage)
 
 void write_dashboard_uri_string(Inkplate &display, const char* dashboard_uri, char* uri512buff)
 {
-  bool is_dashboard_slug_load = dashboard_uri[0] == "" || dashboard_uri[0] == '/';
+  bool is_dashboard_slug_load = dashboard_uri[0] == '\0' || dashboard_uri[0] == '/';
   if (is_dashboard_slug_load) {
     double voltage = display.readBattery();
     int remaining_percent = get_estimated_remaining_battery_percentage(voltage);
