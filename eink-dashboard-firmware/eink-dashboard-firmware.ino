@@ -178,7 +178,7 @@ void handle_single_click_action()
   }
   else if (current_operating_mode == MENU_MODE) {
     // Navigate to next menu item
-    current_menu_selection_index = (current_menu_selection_index + 1) % MENU_ITEM_COUNT;
+    current_menu_selection_index = (current_menu_selection_index + 1) % menu_item_count;
     update_menu_pointer();
   }
 }
@@ -200,6 +200,23 @@ void handle_long_press_action()
   }
 }
 
+void initialize_fallback_menu()
+{
+  cleanup_menu_items();
+
+  menu_item_count = 3;
+  menu_items = new MenuItem[menu_item_count];
+
+  strlcpy(menu_items[0].title, "Play Next", sizeof(menu_items[0].title));
+  strlcpy(menu_items[0].uri, "PLAY_NEXT", sizeof(menu_items[0].uri));
+
+  strlcpy(menu_items[1].title, "Resume Loop", sizeof(menu_items[1].title));
+  menu_items[1].uri[0] = '\0';
+
+  strlcpy(menu_items[2].title, "Dashboard Unavailable", sizeof(menu_items[2].title));
+  menu_items[2].uri[0] = '\0';
+}
+
 void display_menu()
 {
   display.clearDisplay();
@@ -218,7 +235,7 @@ void display_menu()
   int current_y = calculate_menu_items_start_y();
   int line_height = calculate_menu_line_height();
 
-  for (int i = 0; i < MENU_ITEM_COUNT; i++) {
+  for (int i = 0; i < menu_item_count; i++) {
     display.setCursor(MENU_ITEM_X, current_y);
     display.println(menu_items[i].title);
     current_y += line_height; // Increment Y for next item
@@ -230,10 +247,37 @@ void display_menu()
   display.display();
 }
 
-void execute_normal_dashboard_operation()
+void load_dynamic_menu()
 {
   init_wifi();
-  write_dashboard_uri_string(display, "", uribuff);
+  msg_debug("Loading menu from API...");
+
+  if (!load_menu_items_from_api()) {
+    msg_debug("Failed to load menu, using fallback");
+    initialize_fallback_menu();
+  }
+}
+
+void execute_normal_dashboard_operation()
+{
+  // Timer cycles advance, menu selections don't
+  const char* dashboard_kind = get_or_advance_dashboard_kind();
+
+  // Find dashboard name from menu_items for logging
+  String dashboard_name = "Default";
+  if (menu_items != nullptr && menu_item_count > 2) {
+    for (int i = 2; i < menu_item_count; i++) { // Skip "Play Next" and "Resume Loop"
+      if (strcmp(menu_items[i].uri, dashboard_kind) == 0) {
+        dashboard_name = String(menu_items[i].title);
+        break;
+      }
+    }
+  }
+
+  msg("Resuming: " + dashboard_name);
+
+  init_wifi();
+  write_dashboard_uri_string(display, dashboard_kind, uribuff);
   draw_png_from_web(uribuff, true);
   deep_sleep();
 }
@@ -248,7 +292,7 @@ void draw_menu_pointer()
   int pointer_y = menu_start_y + (current_menu_selection_index * line_height);
 
   // Clear the entire pointer column (white background - 1BIT mode)
-  int total_menu_height = MENU_ITEM_COUNT * line_height;
+  int total_menu_height = menu_item_count * line_height;
   display.fillRect(MENU_POINTER_X - 5, menu_start_y - 5, 40, total_menu_height + 10, 1);
 
   // Draw pointer arrow ">" at calculated position (1BIT colors)
@@ -267,14 +311,44 @@ void update_menu_pointer()
 
 void select_menu_item(int index)
 {
-  bool is_last_entry = index == MENU_ITEM_COUNT - 1;
   display.clearDisplay();
-  if (is_last_entry) {
+
+  // Check for "Play Next" option
+  if (strcmp(menu_items[index].uri, "PLAY_NEXT") == 0) {
     current_operating_mode = NORMAL_MODE;
-    msg_debug("Resuming normal operation");
-    execute_normal_dashboard_operation();
+    msg_debug("Playing next dashboard");
+    execute_normal_dashboard_operation(); // Then resume normal operation
     return;
   }
+
+  // Check for "Resume Loop" option (empty URI)
+  if (menu_items[index].uri[0] == '\0') {
+    current_operating_mode = NORMAL_MODE;
+    msg_debug("Resuming normal operation");
+
+    // Resume Loop: show current dashboard without advancing first
+    const char* dashboard_kind = get_current_dashboard_kind();
+
+    // Find dashboard name for logging
+    String dashboard_name = "Default";
+    if (menu_items != nullptr && menu_item_count > 2) {
+      for (int i = 2; i < menu_item_count; i++) {
+        if (strcmp(menu_items[i].uri, dashboard_kind) == 0) {
+          dashboard_name = String(menu_items[i].title);
+          break;
+        }
+      }
+    }
+
+    msg("Resuming: " + dashboard_name);
+    init_wifi();
+    write_dashboard_uri_string(display, dashboard_kind, uribuff);
+    draw_png_from_web(uribuff, true);
+    deep_sleep();
+    return;
+  }
+
+  // Regular dashboard selection
   msg("Loading: " + String(menu_items[index].title));
   init_wifi();
   write_dashboard_uri_string(display, menu_items[index].uri, uribuff);
@@ -300,8 +374,13 @@ void msg(String text)
   clear_buffer(msgbuff, sizeof(msgbuff));
 }
 
-void msg_debug(String text) {
-  if (LOG_LEVEL_DEBUG) msg(text);
+void msg_debug(String text, int delay_ms) {
+  if (LOG_LEVEL_DEBUG) {
+    msg(text);
+    if (delay_ms > 0) {
+      delay(delay_ms);
+    }
+  }
 }
 
 void setup()
@@ -313,12 +392,16 @@ void setup()
 
   pinMode(GPIO_NUM_36, INPUT_PULLUP);
 
+  // Initialize random seed for dashboard cycling
+  randomSeed(analogRead(0));
+
   RefreshStrategy refresh_strategy = get_refresh_strategy_from_wakeup();
 
   // Check if button triggered wakeup (manual wakeup)
   if (refresh_strategy == GET_FORCED_REFRESH) {
     // Manual button press - enter menu mode
     current_operating_mode = MENU_MODE;
+    load_dynamic_menu();
     display_menu();
 
     // Stay awake to handle button interactions
@@ -330,6 +413,15 @@ void setup()
   else {
     // Timer wakeup or boot - run normal operation
     current_operating_mode = NORMAL_MODE;
+
+    // Load menu items if not already loaded (on first boot)
+    if (menu_items == nullptr) {
+      init_wifi();
+      if (!load_menu_items_from_api()) {
+        msg_debug("Using default dashboard", 1000);
+      }
+    }
+
     execute_normal_dashboard_operation();
   }
 }
